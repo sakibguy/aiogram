@@ -4,10 +4,6 @@ import datetime
 import functools
 import typing
 
-from ..utils import helper
-from ..utils import markdown as md
-from ..utils.deprecated import deprecated
-from ..utils.text_decorations import html_decoration, markdown_decoration
 from . import base, fields
 from .animation import Animation
 from .audio import Audio
@@ -21,6 +17,7 @@ from .inline_keyboard import InlineKeyboardMarkup
 from .input_media import InputMedia, MediaGroup
 from .invoice import Invoice
 from .location import Location
+from .message_auto_delete_timer_changed import MessageAutoDeleteTimerChanged
 from .message_entity import MessageEntity
 from .message_id import MessageId
 from .passport_data import PassportData
@@ -35,6 +32,12 @@ from .venue import Venue
 from .video import Video
 from .video_note import VideoNote
 from .voice import Voice
+from .voice_chat_ended import VoiceChatEnded
+from .voice_chat_participants_invited import VoiceChatParticipantsInvited
+from .voice_chat_started import VoiceChatStarted
+from ..utils import helper
+from ..utils import markdown as md
+from ..utils.text_decorations import html_decoration, markdown_decoration
 
 
 class Message(base.TelegramObject):
@@ -86,6 +89,7 @@ class Message(base.TelegramObject):
     group_chat_created: base.Boolean = fields.Field()
     supergroup_chat_created: base.Boolean = fields.Field()
     channel_chat_created: base.Boolean = fields.Field()
+    message_auto_delete_timer_changed: MessageAutoDeleteTimerChanged = fields.Field(base=MessageAutoDeleteTimerChanged)
     migrate_to_chat_id: base.Integer = fields.Field()
     migrate_from_chat_id: base.Integer = fields.Field()
     pinned_message: Message = fields.Field(base="Message")
@@ -94,6 +98,9 @@ class Message(base.TelegramObject):
     connected_website: base.String = fields.Field()
     passport_data: PassportData = fields.Field(base=PassportData)
     proximity_alert_triggered: ProximityAlertTriggered = fields.Field(base=ProximityAlertTriggered)
+    voice_chat_started: VoiceChatStarted = fields.Field(base=VoiceChatStarted)
+    voice_chat_ended: VoiceChatEnded = fields.Field(base=VoiceChatEnded)
+    voice_chat_participants_invited: VoiceChatParticipantsInvited = fields.Field(base=VoiceChatParticipantsInvited)
     reply_markup: InlineKeyboardMarkup = fields.Field(base=InlineKeyboardMarkup)
 
     @property
@@ -139,6 +146,8 @@ class Message(base.TelegramObject):
             return ContentType.SUCCESSFUL_PAYMENT
         if self.connected_website:
             return ContentType.CONNECTED_WEBSITE
+        if self.message_auto_delete_timer_changed:
+            return ContentType.MESSAGE_AUTO_DELETE_TIMER_CHANGED
         if self.migrate_from_chat_id:
             return ContentType.MIGRATE_FROM_CHAT_ID
         if self.migrate_to_chat_id:
@@ -157,6 +166,12 @@ class Message(base.TelegramObject):
             return ContentType.PASSPORT_DATA
         if self.proximity_alert_triggered:
             return ContentType.PROXIMITY_ALERT_TRIGGERED
+        if self.voice_chat_started:
+            return ContentType.VOICE_CHAT_STARTED
+        if self.voice_chat_ended:
+            return ContentType.VOICE_CHAT_ENDED
+        if self.voice_chat_participants_invited:
+            return ContentType.VOICE_CHAT_PARTICIPANTS_INVITED
 
         return ContentType.UNKNOWN
 
@@ -1399,6 +1414,30 @@ class Message(base.TelegramObject):
             reply_to_message_id=self.message_id if reply else None,
             allow_sending_without_reply=allow_sending_without_reply,
             reply_markup=reply_markup,
+        )
+    
+    async def answer_chat_action(
+        self,
+        action: base.String,
+    ) -> base.Boolean:
+        """
+        Use this method when you need to tell the user that something is happening on the bot's side.
+        The status is set for 5 seconds or less
+        (when a message arrives from your bot, Telegram clients clear its typing status).
+
+        We only recommend using this method when a response from the bot will take
+        a noticeable amount of time to arrive.
+
+        Source: https://core.telegram.org/bots/api#sendchataction
+
+        :param action: Type of action to broadcast
+        :type action: :obj:`base.String`
+        :return: Returns True on success
+        :rtype: :obj:`base.Boolean`
+        """
+        return await self.bot.send_chat_action(
+            chat_id=self.chat.id,
+            action=action,
         )
 
     async def reply(
@@ -2784,11 +2823,6 @@ class Message(base.TelegramObject):
             message_id=self.message_id,
         )
 
-    @deprecated(
-        "This method deprecated since Bot API 4.5. Use method `copy_to` instead. \n"
-        "Read more: https://core.telegram.org/bots/api#copymessage",
-        stacklevel=3
-    )
     async def send_copy(
         self: Message,
         chat_id: typing.Union[str, int],
@@ -2891,6 +2925,14 @@ class Message(base.TelegramObject):
             return await self.bot.send_poll(
                 question=self.poll.question,
                 options=[option.text for option in self.poll.options],
+                is_anonymous=self.poll.is_anonymous,
+                allows_multiple_answers=self.poll.allows_multiple_answers
+                **kwargs,
+            )
+        elif self.dice:
+            kwargs.pop("parse_mode")
+            return await self.bot.send_dice(
+                emoji=self.dice.emoji,
                 **kwargs,
             )
         else:
@@ -2980,6 +3022,7 @@ class ContentType(helper.Helper):
     INVOICE = helper.Item()  # invoice
     SUCCESSFUL_PAYMENT = helper.Item()  # successful_payment
     CONNECTED_WEBSITE = helper.Item()  # connected_website
+    MESSAGE_AUTO_DELETE_TIMER_CHANGED = helper.Item()  # message_auto_delete_timer_changed
     MIGRATE_TO_CHAT_ID = helper.Item()  # migrate_to_chat_id
     MIGRATE_FROM_CHAT_ID = helper.Item()  # migrate_from_chat_id
     PINNED_MESSAGE = helper.Item()  # pinned_message
@@ -2989,6 +3032,9 @@ class ContentType(helper.Helper):
     GROUP_CHAT_CREATED = helper.Item()  # group_chat_created
     PASSPORT_DATA = helper.Item()  # passport_data
     PROXIMITY_ALERT_TRIGGERED = helper.Item()  # proximity_alert_triggered
+    VOICE_CHAT_STARTED = helper.Item() # voice_chat_started
+    VOICE_CHAT_ENDED = helper.Item() # voice_chat_ended
+    VOICE_CHAT_PARTICIPANTS_INVITED = helper.Item() # voice_chat_participants_invited
 
     UNKNOWN = helper.Item()  # unknown
     ANY = helper.Item()  # any
